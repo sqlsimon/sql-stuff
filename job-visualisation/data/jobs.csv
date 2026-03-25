@@ -1,0 +1,8 @@
+JobId,JobName,Category,Enabled,Description,Owner
+A1B2C3D4-E5F6-7890-ABCD-EF1234567890,Nightly Database Backup,Database Maintenance,1,Full backup of all user databases to network share,sa
+B2C3D4E5-F6A7-8901-BCDE-F12345678901,ETL Import - Sales Data,Data Warehouse,1,Imports daily sales data from source systems into the data warehouse,ETLUser
+C3D4E5F6-A7B8-9012-CDEF-123456789012,Index Maintenance,Database Maintenance,1,Rebuilds fragmented indexes and updates statistics on user databases,sa
+D4E5F6A7-B8C9-0123-DEF0-234567890123,Daily Report Generation,Reports,1,Generates daily business summary reports and exports to file share,ReportUser
+E5F6A7B8-C9D0-1234-EF01-345678901234,Cleanup Old Records,Maintenance,1,Archives orders older than 90 days and purges expired audit logs,sa
+F6A7B8C9-D0E1-2345-F012-456789012345,Data Quality Check,Data Warehouse,1,Validates referential integrity and null constraints across key tables,ETLUser
+A7B8C9D0-E1F2-3456-0123-567890123456,Log Shipping,Database Maintenance,1,Ships transaction logs to DR server every hour,sa

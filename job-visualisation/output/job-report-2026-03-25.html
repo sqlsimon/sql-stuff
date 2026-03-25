@@ -1,0 +1,642 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SQL Server Job Monitor - 2026-03-25</title>
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+        crossorigin="anonymous">
+  <style>
+    body { font-size: 0.875rem; background: #f8f9fa; }
+
+    /* â”€â”€ Timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    .timeline-wrap          { overflow-x: auto; }
+    .timeline-grid          { min-width: 900px; }
+    .tl-axis                { display: flex; margin-left: 210px;
+                              border-bottom: 2px solid #dee2e6; padding-bottom: 2px; }
+    .tl-axis-label          { flex: 1; text-align: center; font-size: 0.7rem;
+                              color: #6c757d; user-select: none; }
+    .tl-axis-label:first-child { text-align: left; }
+    .tl-axis-label:last-child  { text-align: right; }
+    .tl-row                 { display: flex; align-items: center;
+                              border-bottom: 1px solid #f0f0f0; min-height: 30px; }
+    .tl-row:hover           { background: #f0f4ff; }
+    .tl-label               { width: 210px; min-width: 210px; padding: 2px 8px 2px 0;
+                              font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis;
+                              white-space: nowrap; color: #333; }
+    .tl-track               { flex: 1; position: relative; height: 20px; }
+    .tl-track-bg            { position: absolute; top: 0; height: 100%;
+                              background: rgba(0,0,0,0.03); pointer-events: none; }
+    .tl-bar                 { position: absolute; height: 100%; min-width: 6px;
+                              border-radius: 3px; opacity: 0.88; cursor: pointer;
+                              transition: opacity 0.1s, transform 0.1s; }
+    .tl-bar:hover           { opacity: 1; transform: scaleY(1.2); z-index: 10; }
+
+    /* â”€â”€ Status colours â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    .status-succeeded  { background: #198754; }
+    .status-failed     { background: #dc3545; }
+    .status-retry      { background: #ffc107; }
+    .status-cancelled  { background: #6c757d; }
+    .status-inprogress { background: #0d6efd;
+                         background-image: repeating-linear-gradient(
+                           45deg, transparent, transparent 4px,
+                           rgba(255,255,255,0.25) 4px, rgba(255,255,255,0.25) 8px); }
+    .status-unknown    { background: #adb5bd; }
+
+    /* â”€â”€ Badge variants (tables) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    .bs-succeeded  { background-color:#198754; color:#fff; }
+    .bs-failed     { background-color:#dc3545; color:#fff; }
+    .bs-retry      { background-color:#ffc107; color:#000; }
+    .bs-cancelled  { background-color:#6c757d; color:#fff; }
+    .bs-inprogress { background-color:#0d6efd; color:#fff; }
+    .bs-unknown    { background-color:#adb5bd; color:#fff; }
+
+    /* â”€â”€ History table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    .job-group-row td   { background: #e9ecef; font-weight: 600; }
+    .step-row           { background: #f8f9fa; }
+    .expand-btn         { width: 22px; height: 22px; padding: 0; font-size: 0.85rem;
+                          line-height: 1; border-radius: 4px; }
+    .dur-wrap  { background:#dee2e6; border-radius:3px; height:6px; min-width:50px; }
+    .dur-fill  { height:6px; border-radius:3px; background:#0d6efd; }
+    thead.sticky th { position: sticky; top: 0; z-index: 5; }
+    .msg-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+                white-space: nowrap; color: #6c757d; font-size: 0.78rem; }
+
+    /* â”€â”€ Misc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    .card { box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .nav-tabs .nav-link { font-weight: 500; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-dark mb-3 py-2">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h5">&#x1F5C2; SQL Server Job Monitor</span>
+    <span class="text-secondary small">Generated: 2026-03-25 12:27:38 &nbsp;|&nbsp; Server: SQLSERVER01</span>
+  </div>
+</nav>
+
+<div class="container-fluid px-3">
+
+  <ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-timeline-btn"
+              data-bs-toggle="tab" data-bs-target="#tab-timeline"
+              type="button" role="tab">
+        &#x1F4C5; Timeline &mdash; 2026-03-25
+        <span class="badge bg-secondary ms-1 fw-normal">00:00 - 12:00</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-history-btn"
+              data-bs-toggle="tab" data-bs-target="#tab-history"
+              type="button" role="tab">
+        &#x1F4CB; Job History
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div class="tab-pane fade show active" id="tab-timeline" role="tabpanel">
+      <div class="card">
+  <div class="card-header d-flex flex-wrap align-items-center gap-2 py-2">
+    <strong>Timeline &mdash; 2026-03-25</strong>
+    <div class="d-flex flex-wrap gap-1 ms-2"><span class="badge status-succeeded me-1">Succeeded</span>
+<span class="badge status-failed me-1">Failed</span>
+<span class="badge status-retry me-1" style="color:#000">Retry</span>
+<span class="badge status-cancelled me-1">Cancelled</span>
+<span class="badge status-inprogress me-1">Running</span></div>
+    <span class="ms-auto text-muted small">Click a bar or job name to jump to history</span>
+  </div>
+  <div class="card-body p-2 timeline-wrap">
+    <div class="timeline-grid">
+      <div class="tl-axis"><div class="tl-axis-label">00:00</div><div class="tl-axis-label">01:00</div><div class="tl-axis-label">02:00</div><div class="tl-axis-label">03:00</div><div class="tl-axis-label">04:00</div><div class="tl-axis-label">05:00</div><div class="tl-axis-label">06:00</div><div class="tl-axis-label">07:00</div><div class="tl-axis-label">08:00</div><div class="tl-axis-label">09:00</div><div class="tl-axis-label">10:00</div><div class="tl-axis-label">11:00</div><div class="tl-axis-label">12:00</div></div>
+      <div class="tl-row">
+  <div class="tl-label" title="Log Shipping" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')" style="cursor:pointer">Log Shipping</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-succeeded" style="left:0%;width:0.2731%;" title="Log Shipping | 00:00 | 00:01:58 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:8.3333%;width:0.2801%;" title="Log Shipping | 01:00 | 00:02:01 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:16.6667%;width:0.2662%;" title="Log Shipping | 02:00 | 00:01:55 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:25%;width:0.2755%;" title="Log Shipping | 03:00 | 00:01:59 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:33.3333%;width:0.2824%;" title="Log Shipping | 04:00 | 00:02:02 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-cancelled" style="left:41.6667%;width:0.1042%;" title="Log Shipping | 05:00 | 00:00:45 | Cancelled" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:50%;width:0.2778%;" title="Log Shipping | 06:00 | 00:02:00 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:58.3333%;width:0.2731%;" title="Log Shipping | 07:00 | 00:01:58 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-succeeded" style="left:66.6667%;width:0.2685%;" title="Log Shipping | 08:00 | 00:01:56 | Succeeded" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')"></div><div class="tl-bar status-inprogress" style="left:75%;width:25%;" title="Log Shipping | 09:00 | Elapsed: 3:28:38 | Running" onclick=""></div></div>
+</div><div class="tl-row">
+  <div class="tl-label" title="Nightly Database Backup" onclick="navigateToJob('A1B2C3D4-E5F6-7890-ABCD-EF1234567890')" style="cursor:pointer">Nightly Database Backup</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-succeeded" style="left:8.3333%;width:1.9097%;" title="Nightly Database Backup | 01:00 | 00:13:45 | Succeeded" onclick="navigateToJob('A1B2C3D4-E5F6-7890-ABCD-EF1234567890')"></div></div>
+</div><div class="tl-row">
+  <div class="tl-label" title="Index Maintenance" onclick="navigateToJob('C3D4E5F6-A7B8-9012-CDEF-123456789012')" style="cursor:pointer">Index Maintenance</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-succeeded" style="left:20.8333%;width:4.1667%;" title="Index Maintenance | 02:30 | 00:30:00 | Succeeded" onclick="navigateToJob('C3D4E5F6-A7B8-9012-CDEF-123456789012')"></div></div>
+</div><div class="tl-row">
+  <div class="tl-label" title="Cleanup Old Records" onclick="navigateToJob('E5F6A7B8-C9D0-1234-EF01-345678901234')" style="cursor:pointer">Cleanup Old Records</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-succeeded" style="left:25%;width:0.6944%;" title="Cleanup Old Records | 03:00 | 00:05:00 | Succeeded" onclick="navigateToJob('E5F6A7B8-C9D0-1234-EF01-345678901234')"></div></div>
+</div><div class="tl-row">
+  <div class="tl-label" title="ETL Import - Sales Data" onclick="navigateToJob('B2C3D4E5-F6A7-8901-BCDE-F12345678901')" style="cursor:pointer">ETL Import - Sales Data</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-succeeded" style="left:50%;width:6.25%;" title="ETL Import - Sales Data | 06:00 | 00:45:00 | Succeeded" onclick="navigateToJob('B2C3D4E5-F6A7-8901-BCDE-F12345678901')"></div></div>
+</div><div class="tl-row">
+  <div class="tl-label" title="Daily Report Generation" onclick="navigateToJob('D4E5F6A7-B8C9-0123-DEF0-234567890123')" style="cursor:pointer">Daily Report Generation</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-succeeded" style="left:62.5%;width:1.3426%;" title="Daily Report Generation | 07:30 | 00:09:40 | Succeeded" onclick="navigateToJob('D4E5F6A7-B8C9-0123-DEF0-234567890123')"></div><div class="tl-bar status-inprogress" style="left:79.1667%;width:20.8333%;" title="Daily Report Generation | 09:30 | Elapsed: 3:58:38 | Running" onclick=""></div></div>
+</div><div class="tl-row">
+  <div class="tl-label" title="Data Quality Check" onclick="navigateToJob('F6A7B8C9-D0E1-2345-F012-456789012345')" style="cursor:pointer">Data Quality Check</div>
+  <div class="tl-track"><div class="tl-track-bg" style="left:8.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:25%;width:8.3333%"></div><div class="tl-track-bg" style="left:41.6667%;width:8.3333%"></div><div class="tl-track-bg" style="left:58.3333%;width:8.3333%"></div><div class="tl-track-bg" style="left:75%;width:8.3333%"></div><div class="tl-track-bg" style="left:91.6667%;width:8.3333%"></div><div class="tl-bar status-failed" style="left:66.6667%;width:0.1736%;" title="Data Quality Check | 08:00 | 00:01:15 | Failed" onclick="navigateToJob('F6A7B8C9-D0E1-2345-F012-456789012345')"></div></div>
+</div>
+    </div>
+  </div>
+</div>
+    </div>
+    <div class="tab-pane fade" id="tab-history" role="tabpanel">
+      <div class="card">
+  <div class="card-header py-2">
+    <strong>Job Run History</strong>
+    <span class="text-muted small ms-2">Click <strong>+</strong> to expand steps &nbsp;|&nbsp; Click a job name to view on timeline</span>
+  </div>
+  <div class="card-body p-0" style="max-height:78vh;overflow-y:auto;">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-dark sticky">
+        <tr>
+          <th style="width:28px"></th>
+          <th>Job / Step</th>
+          <th class="text-nowrap">Start Time</th>
+          <th class="text-nowrap">Duration</th>
+          <th style="min-width:90px">Dur.</th>
+          <th>Status</th>
+          <th>Message</th>
+        </tr>
+      </thead>      <tbody>
+        <tr class="job-group-row" id="job-A7B8C9D0-E1F2-3456-0123-567890123456">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('A7B8C9D0-E1F2-3456-0123-567890123456')" title="View on timeline">Log Shipping</span>
+            <span class="badge bs-succeeded ms-1">17 ok</span><span class="badge bg-secondary ms-1">avg 2m 54s</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 08:00:00</td>
+          <td class="text-nowrap">2026-03-25 08:00:00</td>
+          <td class="text-nowrap">00:01:56</td>
+          <td><div class="dur-wrap" title="2m 56s"><div class="dur-fill" style="width:4.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 07:00:00</td>
+          <td class="text-nowrap">2026-03-25 07:00:00</td>
+          <td class="text-nowrap">00:01:58</td>
+          <td><div class="dur-wrap" title="2m 58s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 06:00:00</td>
+          <td class="text-nowrap">2026-03-25 06:00:00</td>
+          <td class="text-nowrap">00:02:00</td>
+          <td><div class="dur-wrap" title="2m 0s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2015')" data-toggle="2015" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 05:00:00</td>
+          <td class="text-nowrap">2026-03-25 05:00:00</td>
+          <td class="text-nowrap">00:00:45</td>
+          <td><div class="dur-wrap" title="1m 45s"><div class="dur-fill" style="width:1.7%"></div></div></td>
+          <td><span class="badge bs-cancelled">Cancelled</span></td>
+          <td class="msg-cell" title="Job was cancelled by user.">Job was cancelled by user.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2015">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Ship Transaction Log</td>
+          <td class="text-nowrap small">2026-03-25 05:00:00</td>
+          <td class="text-nowrap small">00:00:45</td>
+          <td><div class="dur-wrap" title="1m 45s"><div class="dur-fill" style="width:1.7%"></div></div></td>
+          <td><span class="badge bs-cancelled">Cancelled</span></td>
+          <td class="msg-cell" title="Job cancelled by operator.">Job cancelled by operator.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 04:00:00</td>
+          <td class="text-nowrap">2026-03-25 04:00:00</td>
+          <td class="text-nowrap">00:02:02</td>
+          <td><div class="dur-wrap" title="2m 2s"><div class="dur-fill" style="width:4.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 03:00:00</td>
+          <td class="text-nowrap">2026-03-25 03:00:00</td>
+          <td class="text-nowrap">00:01:59</td>
+          <td><div class="dur-wrap" title="2m 59s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 02:00:00</td>
+          <td class="text-nowrap">2026-03-25 02:00:00</td>
+          <td class="text-nowrap">00:01:55</td>
+          <td><div class="dur-wrap" title="2m 55s"><div class="dur-fill" style="width:4.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 01:00:00</td>
+          <td class="text-nowrap">2026-03-25 01:00:00</td>
+          <td class="text-nowrap">00:02:01</td>
+          <td><div class="dur-wrap" title="2m 1s"><div class="dur-fill" style="width:4.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-25 00:00:00</td>
+          <td class="text-nowrap">2026-03-25 00:00:00</td>
+          <td class="text-nowrap">00:01:58</td>
+          <td><div class="dur-wrap" title="2m 58s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 08:00:00</td>
+          <td class="text-nowrap">2026-03-24 08:00:00</td>
+          <td class="text-nowrap">00:01:56</td>
+          <td><div class="dur-wrap" title="2m 56s"><div class="dur-fill" style="width:4.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 07:00:00</td>
+          <td class="text-nowrap">2026-03-24 07:00:00</td>
+          <td class="text-nowrap">00:01:58</td>
+          <td><div class="dur-wrap" title="2m 58s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 06:00:00</td>
+          <td class="text-nowrap">2026-03-24 06:00:00</td>
+          <td class="text-nowrap">00:02:00</td>
+          <td><div class="dur-wrap" title="2m 0s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 05:00:00</td>
+          <td class="text-nowrap">2026-03-24 05:00:00</td>
+          <td class="text-nowrap">00:01:57</td>
+          <td><div class="dur-wrap" title="2m 57s"><div class="dur-fill" style="width:4.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 04:00:00</td>
+          <td class="text-nowrap">2026-03-24 04:00:00</td>
+          <td class="text-nowrap">00:02:02</td>
+          <td><div class="dur-wrap" title="2m 2s"><div class="dur-fill" style="width:4.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 03:00:00</td>
+          <td class="text-nowrap">2026-03-24 03:00:00</td>
+          <td class="text-nowrap">00:01:59</td>
+          <td><div class="dur-wrap" title="2m 59s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 02:00:00</td>
+          <td class="text-nowrap">2026-03-24 02:00:00</td>
+          <td class="text-nowrap">00:01:55</td>
+          <td><div class="dur-wrap" title="2m 55s"><div class="dur-fill" style="width:4.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 01:00:00</td>
+          <td class="text-nowrap">2026-03-24 01:00:00</td>
+          <td class="text-nowrap">00:02:01</td>
+          <td><div class="dur-wrap" title="2m 1s"><div class="dur-fill" style="width:4.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 00:00:00</td>
+          <td class="text-nowrap">2026-03-24 00:00:00</td>
+          <td class="text-nowrap">00:01:58</td>
+          <td><div class="dur-wrap" title="2m 58s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>      <tbody>
+        <tr class="job-group-row" id="job-F6A7B8C9-D0E1-2345-F012-456789012345">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('F6A7B8C9-D0E1-2345-F012-456789012345')" title="View on timeline">Data Quality Check</span>
+            <span class="badge bs-succeeded ms-1">1 ok</span><span class="badge bs-failed ms-1">1 failed</span><span class="badge bg-secondary ms-1">avg 1m 18s</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2006')" data-toggle="2006" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 08:00:00</td>
+          <td class="text-nowrap">2026-03-25 08:00:00</td>
+          <td class="text-nowrap">00:01:15</td>
+          <td><div class="dur-wrap" title="1m 15s"><div class="dur-fill" style="width:2.8%"></div></div></td>
+          <td><span class="badge bs-failed">Failed</span></td>
+          <td class="msg-cell" title="Job failed. Step 2 returned error. NULL constraint violation in DimCustomer.">Job failed. Step 2 returned error. NULL constraint violation in DimCustomer.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2006">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Check Referential Integrity</td>
+          <td class="text-nowrap small">2026-03-25 08:00:00</td>
+          <td class="text-nowrap small">00:00:28</td>
+          <td><div class="dur-wrap" title="28s"><div class="dur-fill" style="width:1%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="All referential integrity checks passed.">All referential integrity checks passed.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2006">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 2: Validate Null Constraints</td>
+          <td class="text-nowrap small">2026-03-25 08:00:28</td>
+          <td class="text-nowrap small">00:00:47</td>
+          <td><div class="dur-wrap" title="1m 47s"><div class="dur-fill" style="width:1.7%"></div></div></td>
+          <td><span class="badge bs-failed">Failed</span></td>
+          <td class="msg-cell" title="FAILED: NULL constraint violation in DimCustomer.EmailAddress (47 rows).">FAILED: NULL constraint violation in DimCustomer.EmailAddress (47 rows).</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 08:00:00</td>
+          <td class="text-nowrap">2026-03-24 08:00:00</td>
+          <td class="text-nowrap">00:01:22</td>
+          <td><div class="dur-wrap" title="1m 22s"><div class="dur-fill" style="width:3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>      <tbody>
+        <tr class="job-group-row" id="job-D4E5F6A7-B8C9-0123-DEF0-234567890123">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('D4E5F6A7-B8C9-0123-DEF0-234567890123')" title="View on timeline">Daily Report Generation</span>
+            <span class="badge bs-succeeded ms-1">2 ok</span><span class="badge bg-secondary ms-1">avg 10m 44s</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2005')" data-toggle="2005" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 07:30:00</td>
+          <td class="text-nowrap">2026-03-25 07:30:00</td>
+          <td class="text-nowrap">00:09:40</td>
+          <td><div class="dur-wrap" title="10m 40s"><div class="dur-fill" style="width:21.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2005">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Clear Temp Tables</td>
+          <td class="text-nowrap small">2026-03-25 07:30:00</td>
+          <td class="text-nowrap small">00:00:08</td>
+          <td><div class="dur-wrap" title="8s"><div class="dur-fill" style="width:0.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Cleared 3 temp tables.">Cleared 3 temp tables.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2005">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 2: Generate Summary</td>
+          <td class="text-nowrap small">2026-03-25 07:30:08</td>
+          <td class="text-nowrap small">00:07:58</td>
+          <td><div class="dur-wrap" title="8m 58s"><div class="dur-fill" style="width:17.7%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Generated 15 report sections.">Generated 15 report sections.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2005">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 3: Export to File</td>
+          <td class="text-nowrap small">2026-03-25 07:38:06</td>
+          <td class="text-nowrap small">00:01:34</td>
+          <td><div class="dur-wrap" title="2m 34s"><div class="dur-fill" style="width:3.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Exported to fileserver\reports\daily\2026-03-25.xlsx">Exported to fileserver\reports\daily\2026-03-25.xlsx</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 07:30:00</td>
+          <td class="text-nowrap">2026-03-24 07:30:00</td>
+          <td class="text-nowrap">00:09:48</td>
+          <td><div class="dur-wrap" title="10m 48s"><div class="dur-fill" style="width:21.8%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>      <tbody>
+        <tr class="job-group-row" id="job-B2C3D4E5-F6A7-8901-BCDE-F12345678901">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('B2C3D4E5-F6A7-8901-BCDE-F12345678901')" title="View on timeline">ETL Import - Sales Data</span>
+            <span class="badge bs-succeeded ms-1">2 ok</span><span class="badge bg-secondary ms-1">avg 1h 45m</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2004')" data-toggle="2004" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 06:00:00</td>
+          <td class="text-nowrap">2026-03-25 06:00:00</td>
+          <td class="text-nowrap">00:45:00</td>
+          <td><div class="dur-wrap" title="1h 45m 0s"><div class="dur-fill" style="width:100%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2004">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Extract from Source</td>
+          <td class="text-nowrap small">2026-03-25 06:00:00</td>
+          <td class="text-nowrap small">00:04:58</td>
+          <td><div class="dur-wrap" title="5m 58s"><div class="dur-fill" style="width:11%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Extracted 84523 rows from SalesSource.">Extracted 84523 rows from SalesSource.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2004">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 2: Transform Data</td>
+          <td class="text-nowrap small">2026-03-25 06:04:58</td>
+          <td class="text-nowrap small">00:15:01</td>
+          <td><div class="dur-wrap" title="15m 1s"><div class="dur-fill" style="width:33.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Transformed and validated 84523 rows.">Transformed and validated 84523 rows.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2004">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 3: Load to Warehouse</td>
+          <td class="text-nowrap small">2026-03-25 06:19:59</td>
+          <td class="text-nowrap small">00:20:02</td>
+          <td><div class="dur-wrap" title="20m 2s"><div class="dur-fill" style="width:44.5%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Loaded 84523 rows. 12 duplicates skipped.">Loaded 84523 rows. 12 duplicates skipped.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2004">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 4: Update Statistics</td>
+          <td class="text-nowrap small">2026-03-25 06:40:01</td>
+          <td class="text-nowrap small">00:04:59</td>
+          <td><div class="dur-wrap" title="5m 59s"><div class="dur-fill" style="width:11.1%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Statistics updated on DataWarehouse.">Statistics updated on DataWarehouse.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 06:00:00</td>
+          <td class="text-nowrap">2026-03-24 06:00:00</td>
+          <td class="text-nowrap">00:44:08</td>
+          <td><div class="dur-wrap" title="1h 44m 8s"><div class="dur-fill" style="width:98.1%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>      <tbody>
+        <tr class="job-group-row" id="job-E5F6A7B8-C9D0-1234-EF01-345678901234">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('E5F6A7B8-C9D0-1234-EF01-345678901234')" title="View on timeline">Cleanup Old Records</span>
+            <span class="badge bs-succeeded ms-1">2 ok</span><span class="badge bg-secondary ms-1">avg 5m 56s</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2003')" data-toggle="2003" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 03:00:00</td>
+          <td class="text-nowrap">2026-03-25 03:00:00</td>
+          <td class="text-nowrap">00:05:00</td>
+          <td><div class="dur-wrap" title="5m 0s"><div class="dur-fill" style="width:11.1%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2003">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Delete Old Logs</td>
+          <td class="text-nowrap small">2026-03-25 03:00:00</td>
+          <td class="text-nowrap small">00:02:00</td>
+          <td><div class="dur-wrap" title="2m 0s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Deleted 15847 rows from audit log.">Deleted 15847 rows from audit log.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2003">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 2: Archive Old Orders</td>
+          <td class="text-nowrap small">2026-03-25 03:02:00</td>
+          <td class="text-nowrap small">00:03:00</td>
+          <td><div class="dur-wrap" title="3m 0s"><div class="dur-fill" style="width:6.7%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Archived 3241 orders older than 90 days.">Archived 3241 orders older than 90 days.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 03:00:00</td>
+          <td class="text-nowrap">2026-03-24 03:00:00</td>
+          <td class="text-nowrap">00:04:53</td>
+          <td><div class="dur-wrap" title="5m 53s"><div class="dur-fill" style="width:10.9%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>      <tbody>
+        <tr class="job-group-row" id="job-C3D4E5F6-A7B8-9012-CDEF-123456789012">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('C3D4E5F6-A7B8-9012-CDEF-123456789012')" title="View on timeline">Index Maintenance</span>
+            <span class="badge bs-succeeded ms-1">2 ok</span><span class="badge bg-secondary ms-1">avg 30m 54s</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2002')" data-toggle="2002" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 02:30:00</td>
+          <td class="text-nowrap">2026-03-25 02:30:00</td>
+          <td class="text-nowrap">00:30:00</td>
+          <td><div class="dur-wrap" title="30m 0s"><div class="dur-fill" style="width:66.7%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2002">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Rebuild Indexes</td>
+          <td class="text-nowrap small">2026-03-25 02:30:00</td>
+          <td class="text-nowrap small">00:25:00</td>
+          <td><div class="dur-wrap" title="25m 0s"><div class="dur-fill" style="width:55.6%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Rebuilt 247 indexes on UserDB.">Rebuilt 247 indexes on UserDB.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2002">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 2: Update Statistics</td>
+          <td class="text-nowrap small">2026-03-25 02:55:00</td>
+          <td class="text-nowrap small">00:05:00</td>
+          <td><div class="dur-wrap" title="5m 0s"><div class="dur-fill" style="width:11.1%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Updated statistics on 83 tables.">Updated statistics on 83 tables.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 02:30:00</td>
+          <td class="text-nowrap">2026-03-24 02:30:00</td>
+          <td class="text-nowrap">00:29:49</td>
+          <td><div class="dur-wrap" title="30m 49s"><div class="dur-fill" style="width:66.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>      <tbody>
+        <tr class="job-group-row" id="job-A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+          <td></td>
+          <td>
+            <span style="cursor:pointer" onclick="navigateToJob('A1B2C3D4-E5F6-7890-ABCD-EF1234567890')" title="View on timeline">Nightly Database Backup</span>
+            <span class="badge bs-succeeded ms-1">2 ok</span><span class="badge bg-secondary ms-1">avg 14m 38s</span>
+          </td>
+          <td colspan="5"></td>
+        </tr>        <tr>
+          <td class="text-center"><button class="expand-btn btn btn-sm btn-outline-secondary" onclick="toggleSteps('2001')" data-toggle="2001" title="Expand steps">+</button></td>
+          <td class="text-muted small ps-3">2026-03-25 01:00:00</td>
+          <td class="text-nowrap">2026-03-25 01:00:00</td>
+          <td class="text-nowrap">00:13:45</td>
+          <td><div class="dur-wrap" title="14m 45s"><div class="dur-fill" style="width:30.6%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2001">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 1: Check Disk Space</td>
+          <td class="text-nowrap small">2026-03-25 01:00:00</td>
+          <td class="text-nowrap small">00:00:28</td>
+          <td><div class="dur-wrap" title="28s"><div class="dur-fill" style="width:1%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Step succeeded.">Step succeeded.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2001">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 2: Backup master</td>
+          <td class="text-nowrap small">2026-03-25 01:00:28</td>
+          <td class="text-nowrap small">00:00:42</td>
+          <td><div class="dur-wrap" title="1m 42s"><div class="dur-fill" style="width:1.6%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Processed 1 pages for database master.">Processed 1 pages for database master.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2001">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 3: Backup msdb</td>
+          <td class="text-nowrap small">2026-03-25 01:01:10</td>
+          <td class="text-nowrap small">00:00:35</td>
+          <td><div class="dur-wrap" title="1m 35s"><div class="dur-fill" style="width:1.3%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Processed 1 pages for database msdb.">Processed 1 pages for database msdb.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2001">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 4: Backup UserDB</td>
+          <td class="text-nowrap small">2026-03-25 01:01:45</td>
+          <td class="text-nowrap small">00:10:00</td>
+          <td><div class="dur-wrap" title="10m 0s"><div class="dur-fill" style="width:22.2%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Backup completed. 45823 MB written to network share.">Backup completed. 45823 MB written to network share.</td>
+        </tr>        <tr class="step-row d-none" data-stepgroup="2001">
+          <td></td>
+          <td class="ps-4 text-muted small">&#x21B3; Step 5: Verify Backup</td>
+          <td class="text-nowrap small">2026-03-25 01:11:45</td>
+          <td class="text-nowrap small">00:02:00</td>
+          <td><div class="dur-wrap" title="2m 0s"><div class="dur-fill" style="width:4.4%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="RESTORE VERIFYONLY completed successfully.">RESTORE VERIFYONLY completed successfully.</td>
+        </tr>        <tr>
+          <td class="text-center"></td>
+          <td class="text-muted small ps-3">2026-03-24 01:00:00</td>
+          <td class="text-nowrap">2026-03-24 01:00:00</td>
+          <td class="text-nowrap">00:13:30</td>
+          <td><div class="dur-wrap" title="14m 30s"><div class="dur-fill" style="width:30%"></div></div></td>
+          <td><span class="badge bs-succeeded">Succeeded</span></td>
+          <td class="msg-cell" title="Job succeeded.">Job succeeded.</td>
+        </tr>      </tbody>    </table>
+  </div>
+</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc4s9bIOgUxi8T/jzmBMT3x3YmTqXoTdIOCSmB3RLTM"
+        crossorigin="anonymous"></script>
+<script>
+  // Switch to history tab and scroll to a job's anchor
+  function navigateToJob(jobId) {
+    var btn = document.getElementById('tab-history-btn');
+    bootstrap.Tab.getOrCreateInstance(btn).show();
+    setTimeout(function () {
+      var el = document.getElementById('job-' + jobId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+  }
+
+  // Toggle step rows for a given job run instance
+  function toggleSteps(instanceId) {
+    var rows = document.querySelectorAll('[data-stepgroup="' + instanceId + '"]');
+    var anyHidden = false;
+    rows.forEach(function (r) { if (r.classList.contains('d-none')) anyHidden = true; });
+    rows.forEach(function (r) { r.classList.toggle('d-none', !anyHidden); });
+    var btn = document.querySelector('[data-toggle="' + instanceId + '"]');
+    if (btn) btn.textContent = anyHidden ? '-' : '+';
+  }
+</script>
+
+</body>
+</html>
