@@ -47,12 +47,28 @@ function ConvertTo-Timeline {
     # ── Collect run objects from history and activity ─────────────────────────
     $runs = [System.Collections.Generic.List[PSObject]]::new()
 
+    # Returns HH:mm:ss from an ISO datetime string
+    function Get-TimeLabel([string]$isoDateTime) {
+        return [datetime]::Parse($isoDateTime).ToString('HH:mm:ss')
+    }
+
+    # Builds the HTML tooltip shown inside Bootstrap's tooltip popup
+    function Build-Tooltip([string]$jobName, [string]$startLabel, [string]$endLabel,
+                           [string]$duration, [string]$status) {
+        $safe = { param($s) $s.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;').Replace('"','&quot;') }
+        $sName   = & $safe $jobName
+        $sStatus = & $safe $status
+        return "<strong>$sName</strong><br>Start: $startLabel<br>End:&nbsp;&nbsp; $endLabel<br>Duration: $duration<br>Status:&nbsp; $sStatus"
+    }
+
     # Completed / historical runs (job-level rows only)
     $History | Where-Object { $_.StepId -eq '0' -and $_.StartDateTime.StartsWith($Date) } |
     ForEach-Object {
-        $startMin = Get-MinutesFromMidnight $_.StartDateTime
-        $durMin   = [int]$_.DurationSeconds / 60.0
-        $start    = $_.StartDateTime.Substring(11, 5)
+        $startMin  = Get-MinutesFromMidnight $_.StartDateTime
+        $durMin    = [int]$_.DurationSeconds / 60.0
+        $startLbl  = Get-TimeLabel $_.StartDateTime
+        $endDt     = [datetime]::Parse($_.StartDateTime).AddSeconds([int]$_.DurationSeconds)
+        $endLbl    = $endDt.ToString('HH:mm:ss')
         $runs.Add([PSCustomObject]@{
             JobId       = $_.JobId
             JobName     = $_.JobName
@@ -60,7 +76,7 @@ function ConvertTo-Timeline {
             DurationMin = $durMin
             StatusLabel = $_.RunStatusLabel
             InstanceId  = $_.InstanceId
-            Tooltip     = "$($_.JobName) | $start | $($_.DurationFormatted) | $($_.RunStatusLabel)"
+            Tooltip     = Build-Tooltip $_.JobName $startLbl $endLbl $_.DurationFormatted $_.RunStatusLabel
         })
     }
 
@@ -73,6 +89,7 @@ function ConvertTo-Timeline {
         if ($durMin -lt 0) { $durMin = 0 }
         $elapsedSec = [int](($ReportTime - $startDt).TotalSeconds)
         $elapsed    = '{0}:{1:D2}:{2:D2}' -f [int]($elapsedSec/3600), [int](($elapsedSec%3600)/60), ($elapsedSec%60)
+        $startLbl   = $startDt.ToString('HH:mm:ss')
         $runs.Add([PSCustomObject]@{
             JobId       = $_.JobId
             JobName     = $_.JobName
@@ -80,7 +97,7 @@ function ConvertTo-Timeline {
             DurationMin = $durMin
             StatusLabel = 'InProgress'
             InstanceId  = ''
-            Tooltip     = "$($_.JobName) | $($_.StartExecutionDate.Substring(11,5)) | Elapsed: $elapsed | Running"
+            Tooltip     = Build-Tooltip $_.JobName $startLbl '(still running)' $elapsed 'Running'
         })
     }
 
@@ -127,10 +144,11 @@ function ConvertTo-Timeline {
             $sc    = Get-StatusClass $run.StatusLabel
             $style = Get-BarStyle $run.StartMin $run.DurationMin
             if ($null -eq $style) { continue }
-            $tip   = ConvertTo-HtmlEncoded $run.Tooltip
+            # Escape for an HTML attribute value (content is already HTML-safe internally)
+            $tip   = $run.Tooltip.Replace('"', '&quot;')
             $click = if ($run.InstanceId) { "navigateToJob('$($run.JobId)')" } else { '' }
             [void]$barsHtml.Append(
-                "<div class=`"tl-bar $sc`" style=`"$style`" title=`"$tip`" onclick=`"$click`"></div>")
+                "<div class=`"tl-bar $sc`" style=`"$style`" data-tooltip=`"$tip`" onclick=`"$click`"></div>")
         }
 
         [void]$rowsHtml.Append(@"

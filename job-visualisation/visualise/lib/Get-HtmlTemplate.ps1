@@ -81,6 +81,32 @@ function Get-HtmlTemplate {
     /* ── Misc ──────────────────────────────────────────────────────────── */
     .card { box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
     .nav-tabs .nav-link { font-weight: 500; }
+
+    /* ── Timeline bar tooltip ───────────────────────────────────────────── */
+    #tl-tip {
+      position: fixed;
+      z-index: 9999;
+      display: none;
+      background: #1e2328;
+      color: #f0f0f0;
+      border-radius: 6px;
+      padding: 8px 13px;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    #tl-tip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: var(--arrow-left, 50%);
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #1e2328;
+    }
   </style>
 </head>
 <body>
@@ -127,6 +153,44 @@ function Get-HtmlTemplate {
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc4s9bIOgUxi8T/jzmBMT3x3YmTqXoTdIOCSmB3RLTM"
         crossorigin="anonymous"></script>
 <script>
+  // ── Custom tooltip for timeline bars ─────────────────────────────────────
+  var tlTip = document.createElement('div');
+  tlTip.id = 'tl-tip';
+  document.body.appendChild(tlTip);
+
+  function showTip(el, e) {
+    tlTip.innerHTML = el.dataset.tooltip;
+    tlTip.style.display = 'block';
+    moveTip(el, e);
+  }
+
+  function moveTip(el, e) {
+    var tw = tlTip.offsetWidth;
+    var th = tlTip.offsetHeight;
+    // Prefer above the cursor; fall back below if no room
+    var x = e.clientX - tw / 2;
+    var y = e.clientY - th - 12;
+    if (y < 6) { y = e.clientY + 18; }
+    // Clamp horizontally within the viewport
+    var maxX = window.innerWidth - tw - 8;
+    x = Math.max(8, Math.min(x, maxX));
+    tlTip.style.left = x + 'px';
+    tlTip.style.top  = y + 'px';
+    // Position the arrow so it always points at the cursor
+    var arrowPct = Math.round(Math.min(Math.max((e.clientX - x) / tw * 100, 8), 92));
+    tlTip.style.setProperty('--arrow-left', arrowPct + '%');
+  }
+
+  function hideTip() { tlTip.style.display = 'none'; }
+
+  document.querySelectorAll('[data-tooltip]').forEach(function (el) {
+    el.addEventListener('mouseenter', function (e) { showTip(el, e); });
+    el.addEventListener('mousemove',  function (e) { moveTip(el, e); });
+    el.addEventListener('mouseleave', hideTip);
+    el.addEventListener('click',      hideTip);
+  });
+
+  // ── Tab navigation ───────────────────────────────────────────────────────
   // Switch to history tab and scroll to a job's anchor
   function navigateToJob(jobId) {
     var btn = document.getElementById('tab-history-btn');
